@@ -32,6 +32,7 @@ class HealthCheckJob implements ShouldQueue
                 if (str_contains($url, '|')) {
                     [$ipUrl, $hostHeader] = explode('|', $url);
                     $response = Http::timeout($timeout)
+                        ->withOptions(['verify' => false,]) // Disable SSL verification for local IPs
                         ->withHeaders(['Host' => trim($hostHeader)])
                         ->get(trim($ipUrl));
                     $displayUrl = "{$hostHeader} (via {$ipUrl})";

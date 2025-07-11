@@ -66,6 +66,12 @@ Note:
 - If a simple URL is given, it directly hits the URL.
 - If a URL is followed by `|`, it will be checked on localhost instead by setting `Host` header to ensure it works on
   the same server.
+- Local IP checks are useful for internal APIs or services that may not be accessible externally, OR if you want to
+  avoid
+  external DNS resolution and check behind a Load Balancer.
+- Local IP checks will be done ignoring SSL verification, As this might not have a valid SSL internally. Common example:
+  Cloudflare Origin CA
+  certificates.
 
 Then add cron entry:
 
