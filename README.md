@@ -53,12 +53,19 @@ php artisan key:generate
 Add your health monitor settings in `.env`:
 
 ```
-HEALTH_ROUTES=https://your-app.com/health,https://api.your-app.com/ping
+HEALTH_ROUTES=https://your-app.com/health,http://127.0.0.1|https://api.your-app.com/ping
 HEALTH_TIMEOUT=5
 HEALTH_ALERT_EMAILS=admin@example.com,devops@example.com
 HEALTH_DOCKER_CONTAINERS=nginx,laravel_app,redis
 HEALTH_SERVER_NAME=My Laravel Server 1
 ```
+
+Note:
+
+- `HEALTH_ROUTES` is a comma-separated list of URLs to check.
+- If a simple URL is given, it directly hits the URL.
+- If a URL is followed by `|`, it will be checked on localhost instead by setting `Host` header to ensure it works on
+  the same server.
 
 Then add cron entry:
 

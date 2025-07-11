@@ -25,14 +25,27 @@ class HealthCheckJob implements ShouldQueue
 
         foreach ($routes as $url) {
             try {
-                $response = Http::timeout($timeout)->get(trim($url));
+                $url = trim($url);
+                $hostHeader = null;
+
+                // Check if this route should use a local IP + Host header
+                if (str_contains($url, '|')) {
+                    [$ipUrl, $hostHeader] = explode('|', $url);
+                    $response = Http::timeout($timeout)
+                        ->withHeaders(['Host' => trim($hostHeader)])
+                        ->get(trim($ipUrl));
+                    $displayUrl = "{$hostHeader} (via {$ipUrl})";
+                } else {
+                    $response = Http::timeout($timeout)->get($url);
+                    $displayUrl = preg_replace('/^https?:\/\//', '', $url);
+                }
+
                 if (!$response->successful()) {
-                    $cleanUrl = preg_replace('/^https?:\/\//', '', $url);
-                    $failed[] = "Route check failed: <code>{$cleanUrl}</code> returned status " . $response->status();
+                    $failed[] = "Route check failed: <code>{$displayUrl}</code> returned status " . $response->status();
                 }
             } catch (\Throwable $e) {
-                $cleanUrl = preg_replace('/^https?:\/\//', '', $url);
-                $failed[] = "Route check failed: <code>{$cleanUrl}</code> threw an exception: " . $e->getMessage();
+                $displayUrl = $displayUrl ?? preg_replace('/^https?:\/\//', '', $url);
+                $failed[] = "Route check failed: <code>{$displayUrl}</code> threw an exception: " . $e->getMessage();
             }
         }
 
