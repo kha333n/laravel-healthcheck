@@ -1,0 +1,136 @@
+# 🩺 Laravel Health Check App
+
+This lightweight Laravel application performs **automated system health checks** and **reports failures via email**. It
+is designed to run on servers (e.g., VPS or container) and integrates with Laravel scheduler to periodically monitor:
+
+- Routes (URLs)
+- Supervisor services
+- Docker containers
+- Cron service
+
+Cached health status is exposed via an endpoint for use with **NLBs or uptime tools**.
+
+---
+
+## 🚀 Features
+
+- ✅ URL response validation (status code check)
+- ✅ Supervisor process status check
+- ✅ Docker container running & health check
+- ✅ Cron service active check
+- ✅ Failsafe cache storage of health result
+- ✅ Email alerts for failures
+- ✅ Designed for lightweight headless deployment
+
+---
+
+## ⚙️ Setup Instructions
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/kha333n/laravel-healthcheck.git
+cd laravel-healthcheck
+```
+
+### 2. Install Dependencies
+
+```bash
+composer install
+```
+
+### 3. Configure Environment
+
+Copy `.env.example` and edit required values:
+
+```bash
+cp .env.example .env
+php artisan key:generate
+```
+
+### 4. Update Config
+
+Add your health monitor settings in `.env`:
+
+```
+HEALTH_ROUTES=https://your-app.com/health,https://api.your-app.com/ping
+HEALTH_TIMEOUT=5
+HEALTH_ALERT_EMAILS=admin@example.com,devops@example.com
+HEALTH_DOCKER_CONTAINERS=nginx,laravel_app,redis
+HEALTH_SERVER_NAME=My Laravel Server 1
+```
+
+Then add cron entry:
+
+```bash
+* * * * * cd /path/to/laravel-healthcheck && php artisan schedule:run >> /dev/null 2>&1
+```
+
+---
+
+## 📬 Email Alert Example
+
+If a health check fails, admins receive an HTML email like:
+
+```
+Subject: [ALERT] My Laravel Server 1 - Health Check Failed
+
+• Route check failed: <code>your-app.com/ping</code> returned status 500
+• Docker container 'laravel_app' is not running
+• Cron is not running
+```
+
+---
+
+## 🧪 Test Manually
+
+To run health check manually:
+
+```bash
+php artisan queue:work --once
+php artisan schedule:run
+```
+
+Or dispatch directly:
+
+```bash
+php artisan tinker
+>>> dispatch(new \App\Jobs\HealthCheckJob());
+```
+
+---
+
+## 🧼 Supervisor Test Tips
+
+To simulate failures:
+
+- Create a dummy `.conf` file in `/etc/supervisor/conf.d/` that starts a fake service and does not run.
+- Restart supervisor and observe the health check catch it.
+
+---
+
+## 🐳 Docker Notes
+
+If a container does **not** define a health check, it's still considered healthy if running.
+Only when `.State.Health.Status` exists, it will be checked.
+
+---
+
+## 📁 File Structure Overview
+
+```
+app/
+└── Jobs/
+    └── HealthCheckJob.php        # Main job logic
+
+routes/
+└── web.php                       # Health status route
+
+.env.example                      # Sample env file
+```
+
+---
+
+## 📜 License
+
+I don't care about licenses, use it as you wish. Just don't be a jerk.
