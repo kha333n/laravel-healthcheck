@@ -66,6 +66,9 @@ Note:
 - If a simple URL is given, it directly hits the URL.
 - If a URL is followed by `|`, it will be checked on localhost instead by setting `Host` header to ensure it works on
   the same server.
+- If you wan to check HTTP or HTTPS add with local IP only domain must be without protocol, e.g.
+  `https://127.0.0.1|your-app.com` OR if app is on different port then you can set it like
+  `https://127.0.0.1:8000|your-app.com`.  ***"Adding protocol in host will not work check will fail!"***
 - Local IP checks are useful for internal APIs or services that may not be accessible externally, OR if you want to
   avoid
   external DNS resolution and check behind a Load Balancer.
