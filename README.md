@@ -140,7 +140,7 @@ app/
     └── HealthCheckJob.php        # Main job logic
 
 routes/
-└── web.php                       # Health status route
+└── api.php                       # Health status route
 
 .env.example                      # Sample env file
 ```
