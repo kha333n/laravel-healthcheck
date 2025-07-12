@@ -8,7 +8,7 @@ class HealthStatusController extends Controller
 {
     public function __invoke()
     {
-        if (Cache::get('system_health_status') === 'healthy') {
+        if (Cache::get(getInstanceHealthKey()) === 'healthy') {
             return response()->json(['status' => 'ok'], 200);
         }
 

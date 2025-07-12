@@ -21,6 +21,8 @@ class HealthCheckJob implements ShouldQueue
         $timeout = (int)config('services.health_monitor.timeout', 5);
         $emails = explode(',', config('services.health_monitor.emails', ''));
 
+        $cacheKey = getInstanceHealthKey();
+
         $failed = [];
 
         foreach ($routes as $url) {
@@ -157,9 +159,9 @@ class HealthCheckJob implements ShouldQueue
         }
 
         if (empty($failed)) {
-            Cache::put('system_health_status', 'healthy', now()->addMinutes(8));
+            Cache::put($cacheKey, 'healthy', now()->addMinutes(8));
         } else {
-            Cache::put('system_health_status', 'unhealthy', now()->addMinutes(8));
+            Cache::put($cacheKey, 'unhealthy', now()->addMinutes(8));
 
             $serverName = config('services.health_monitor.server_name', 'Server');
             $emails = array_filter($emails); // Remove empty emails
