@@ -24,78 +24,142 @@ class HealthCheckJob implements ShouldQueue
         $failed = [];
 
         foreach ($routes as $url) {
-            try {
-                $url = trim($url);
-                $hostHeader = null;
+            $url = trim($url);
+            $hostHeader = null;
+            $displayUrl = null;
+            $attempts = 0;
+            $maxAttempts = 3;
+            $success = false;
 
-                // Check if this route should use a local IP + Host header
-                if (str_contains($url, '|')) {
-                    [$ipUrl, $hostHeader] = explode('|', $url);
-                    $response = Http::timeout($timeout)
-                        ->withOptions(['verify' => false,]) // Disable SSL verification for local IPs
-                        ->withHeaders(['Host' => trim($hostHeader)])
-                        ->get(trim($ipUrl));
-                    $displayUrl = "{$hostHeader} (via {$ipUrl})";
-                } else {
-                    $response = Http::timeout($timeout)->get($url);
-                    $displayUrl = preg_replace('/^https?:\/\//', '', $url);
-                }
+            while ($attempts < $maxAttempts && !$success) {
+                try {
+                    $attempts++;
 
-                if (!$response->successful()) {
-                    $failed[] = "Route check failed: <code>{$displayUrl}</code> returned status " . $response->status();
+                    if (str_contains($url, '|')) {
+                        [$ipUrl, $hostHeader] = explode('|', $url);
+                        $response = Http::timeout($timeout)
+                            ->withOptions(['verify' => false])
+                            ->withHeaders(['Host' => trim($hostHeader)])
+                            ->get(trim($ipUrl));
+                        $displayUrl = "{$hostHeader} (via {$ipUrl})";
+                    } else {
+                        $response = Http::timeout($timeout)->get($url);
+                        $displayUrl = preg_replace('/^https?:\/\//', '', $url);
+                    }
+
+                    if ($response->successful()) {
+                        $success = true;
+                    } elseif ($attempts >= $maxAttempts) {
+                        $failed[] = "Route check failed: <code>{$displayUrl}</code> returned status " . $response->status();
+                    } else {
+                        usleep(500000); // 0.5 sec delay between retries
+                    }
+                } catch (\Throwable $e) {
+                    $displayUrl = $displayUrl ?? preg_replace('/^https?:\/\//', '', $url);
+                    if ($attempts >= $maxAttempts) {
+                        $failed[] = "Route check failed: <code>{$displayUrl}</code> threw an exception: " . $e->getMessage();
+                    } else {
+                        usleep(500000); // 0.5 sec delay between retries
+                    }
                 }
-            } catch (\Throwable $e) {
-                $displayUrl = $displayUrl ?? preg_replace('/^https?:\/\//', '', $url);
-                $failed[] = "Route check failed: <code>{$displayUrl}</code> threw an exception: " . $e->getMessage();
             }
         }
 
-        $supervisorStatus = shell_exec('supervisorctl status');
-        $supervisorLines = explode("\n", trim($supervisorStatus));
+        // Supervisor check with retries
+        $supervisorAttempts = 0;
+        $supervisorMax = 3;
+        $supervisorSuccess = false;
 
-        foreach ($supervisorLines as $line) {
-            if (empty($line)) continue;
+        while ($supervisorAttempts < $supervisorMax && !$supervisorSuccess) {
+            $supervisorAttempts++;
+            $supervisorStatus = shell_exec('supervisorctl status');
+            $supervisorLines = explode("\n", trim($supervisorStatus));
 
-            // A line is OK only if it contains 'RUNNING' after the service name
-            if (!preg_match('/\s+RUNNING\s+/', $line)) {
-                $failed[] = "Supervisor issue: $line";
+            $supervisorErrors = [];
+            foreach ($supervisorLines as $line) {
+                if (empty($line)) continue;
+                if (!preg_match('/\s+RUNNING\s+/', $line)) {
+                    $supervisorErrors[] = "Supervisor issue: $line";
+                }
+            }
+
+            if (empty($supervisorErrors)) {
+                $supervisorSuccess = true;
+            } else {
+                if ($supervisorAttempts >= $supervisorMax) {
+                    $failed = array_merge($failed, $supervisorErrors);
+                } else {
+                    usleep(500000);
+                }
             }
         }
 
         $containers = explode(',', config('services.health_monitor.docker_containers', ''));
-
+        // Docker container checks with retries
         foreach ($containers as $container) {
             $container = trim($container);
             if (empty($container)) continue;
 
-            // Check container running status
-            $inspect = shell_exec("docker inspect --format='{{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' $container");
+            $attempts = 0;
+            $success = false;
 
-            if (!$inspect) {
-                $failed[] = "Docker container '$container' not found or cannot inspect.";
-                continue;
-            }
+            while ($attempts < 3 && !$success) {
+                $attempts++;
+                $inspect = shell_exec("docker inspect --format='{{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' $container");
 
-            $parts = explode(' ', trim($inspect));
-            $running = $parts[0] ?? 'false';
-            $health = $parts[1] ?? null;
+                if (!$inspect) {
+                    if ($attempts >= 3) {
+                        $failed[] = "Docker container '$container' not found or cannot inspect.";
+                    } else {
+                        usleep(500000);
+                    }
+                    continue;
+                }
 
-            if ($running !== 'true') {
-                $failed[] = "Docker container '$container' is not running.";
-            } elseif ($health !== null && $health !== 'healthy') {
-                $failed[] = "Docker container '$container' is running but not healthy (status: $health).";
+                $parts = explode(' ', trim($inspect));
+                $running = $parts[0] ?? 'false';
+                $health = $parts[1] ?? null;
+
+                if ($running !== 'true') {
+                    if ($attempts >= 3) {
+                        $failed[] = "Docker container '$container' is not running.";
+                    } else {
+                        usleep(500000);
+                    }
+                } elseif ($health !== null && $health !== 'healthy') {
+                    if ($attempts >= 3) {
+                        $failed[] = "Docker container '$container' is running but not healthy (status: $health).";
+                    } else {
+                        usleep(500000);
+                    }
+                } else {
+                    $success = true;
+                }
             }
         }
 
-        $cronStatus = shell_exec('systemctl is-active cron');
-        if (trim($cronStatus) !== 'active') {
-            $failed[] = "Cron is not running";
+        // Cron check with retry
+        $cronAttempts = 0;
+        $cronSuccess = false;
+        while ($cronAttempts < 3 && !$cronSuccess) {
+            $cronAttempts++;
+            $cronStatus = trim(shell_exec('systemctl is-active cron'));
+
+            if ($cronStatus === 'active') {
+                $cronSuccess = true;
+            } else {
+                if ($cronAttempts >= 3) {
+                    $failed[] = "Cron is not running";
+                } else {
+                    usleep(500000);
+                }
+            }
         }
 
         if (empty($failed)) {
-            Cache::put('system_health_status', 'healthy', now()->addMinutes(6));
+            Cache::put('system_health_status', 'healthy', now()->addMinutes(8));
         } else {
-            Cache::put('system_health_status', 'unhealthy', now()->addMinutes(6));
+            Cache::put('system_health_status', 'unhealthy', now()->addMinutes(8));
 
             $serverName = config('services.health_monitor.server_name', 'Server');
             $emails = array_filter($emails); // Remove empty emails
