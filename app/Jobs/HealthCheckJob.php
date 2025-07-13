@@ -163,7 +163,8 @@ class HealthCheckJob implements ShouldQueue
         } else {
             Cache::put($cacheKey, 'unhealthy', now()->addMinutes(8));
 
-            $serverName = config('services.health_monitor.server_name', 'Server');
+            $hostName = gethostname();
+            $serverName = "Server: {$hostName} Health Check";
             $emails = array_filter($emails); // Remove empty emails
 
             $subject = "[ALERT] {$serverName} - Health Check Failed";
